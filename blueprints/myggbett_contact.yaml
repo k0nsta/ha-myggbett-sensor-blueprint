@@ -1,0 +1,168 @@
+blueprint:
+  name: IKEA MYGGBETT — door/window contact actions
+  description: >
+    React to an IKEA **MYGGBETT** (or any) door/window contact sensor.
+
+    Bind **OPEN** and **CLOSE** independently to lights and/or any actions
+    (notifications, scenes, scripts). Optional debounce, a condition that gates the
+    OPEN branch (e.g. only when dark), and an **open-too-long** reminder that can
+    repeat until the door is finally closed.
+
+    The sensor appears in Home Assistant as a `binary_sensor`
+    (device_class door / window / opening / garage_door): **`on` = open, `off` = closed.**
+  domain: automation
+  source_url: https://github.com/k0nsta/ha-myggbett-sensor-blueprint/blob/main/blueprints/myggbett_contact.yaml
+  input:
+    sec_sensor:
+      name: 1 · Sensor
+      icon: mdi:door
+      input:
+        contact_sensor:
+          name: Door/window sensor
+          description: The contact binary_sensor (on = open, off = closed).
+          selector:
+            entity:
+              filter:
+                - { domain: binary_sensor, device_class: door }
+                - { domain: binary_sensor, device_class: window }
+                - { domain: binary_sensor, device_class: opening }
+                - { domain: binary_sensor, device_class: garage_door }
+    sec_open:
+      name: 2 · When OPENED
+      icon: mdi:door-open
+      input:
+        open_lights:
+          name: Lights to turn on
+          description: Optional. Leave empty to not touch any light.
+          default: []
+          selector: { target: { entity: { domain: light } } }
+        open_actions:
+          name: Actions to run
+          description: >
+            Optional. Any actions — e.g. a `notify.mobile_app_*` call,
+            `persistent_notification.create`, activate a scene, or run a script.
+          default: []
+          selector: { action: {} }
+    sec_close:
+      name: 3 · When CLOSED
+      icon: mdi:door-closed
+      input:
+        close_lights:
+          name: Lights to turn off
+          description: Optional. Leave empty to not touch any light.
+          default: []
+          selector: { target: { entity: { domain: light } } }
+        close_actions:
+          name: Actions to run
+          description: Optional. Any actions — notification, scene, script, …
+          default: []
+          selector: { action: {} }
+    sec_behaviour:
+      name: 4 · Behaviour
+      icon: mdi:tune
+      collapsed: true
+      input:
+        open_for:
+          name: Open debounce (s)
+          description: Sensor must stay open this long before the OPEN branch runs. 0 = instant.
+          default: 0
+          selector: { number: { min: 0, max: 600, step: 1, unit_of_measurement: s, mode: box } }
+        close_for:
+          name: Close debounce (s)
+          description: Sensor must stay closed this long before the CLOSE branch runs. 0 = instant.
+          default: 0
+          selector: { number: { min: 0, max: 600, step: 1, unit_of_measurement: s, mode: box } }
+        open_condition:
+          name: Only run OPEN actions when…
+          description: >
+            Optional condition(s) gating the OPEN branch (lights + open actions),
+            e.g. "sun is below horizon". The CLOSE branch always runs.
+          default: []
+          selector: { condition: {} }
+    sec_reminder:
+      name: 5 · Open-too-long reminder
+      icon: mdi:bell-alert
+      collapsed: true
+      input:
+        reminder_enable:
+          name: Enable reminder
+          default: false
+          selector: { boolean: {} }
+        reminder_after:
+          name: Remind after open for (min)
+          default: 5
+          selector: { number: { min: 1, max: 720, step: 1, unit_of_measurement: min, mode: box } }
+        reminder_repeat:
+          name: Repeat every (min)
+          description: 0 = remind once only. Otherwise re-send this often while the door stays open.
+          default: 0
+          selector: { number: { min: 0, max: 720, step: 1, unit_of_measurement: min, mode: box } }
+        reminder_actions:
+          name: Reminder actions
+          description: Runs while the door is still open — e.g. a `notify.mobile_app_*` call.
+          default: []
+          selector: { action: {} }
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  contact_sensor: !input contact_sensor
+  open_lights: !input open_lights
+  close_lights: !input close_lights
+  reminder_enable: !input reminder_enable
+  reminder_after: !input reminder_after
+  reminder_repeat: !input reminder_repeat
+
+triggers:
+  - trigger: state
+    entity_id: !input contact_sensor
+    from: "off"
+    to: "on"
+    for: { seconds: !input open_for }
+    id: opened
+  - trigger: state
+    entity_id: !input contact_sensor
+    from: "on"
+    to: "off"
+    for: { seconds: !input close_for }
+    id: closed
+
+action:
+  - choose:
+      # ================= OPENED =================
+      - conditions:
+          - "{{ trigger.id == 'opened' }}"
+          # empty list (default) => `and` of nothing => always true
+          - condition: and
+            conditions: !input open_condition
+        sequence:
+          - if: "{{ open_lights | length > 0 }}"
+            then:
+              - action: light.turn_on
+                target: !input open_lights
+          # splice the user's action list (empty list = no-op)
+          - sequence: !input open_actions
+          # ---- open-too-long reminder ----
+          - if: "{{ reminder_enable }}"
+            then:
+              - delay: { minutes: "{{ reminder_after | int(5) }}" }
+              - if: "{{ is_state(contact_sensor, 'on') }}"
+                then:
+                  - sequence: !input reminder_actions
+              - repeat:
+                  while: "{{ (reminder_repeat | int(0)) > 0 and is_state(contact_sensor, 'on') }}"
+                  sequence:
+                    - delay: { minutes: "{{ reminder_repeat | int(0) }}" }
+                    - if: "{{ is_state(contact_sensor, 'on') }}"
+                      then:
+                        - sequence: !input reminder_actions
+      # ================= CLOSED =================
+      - conditions:
+          - "{{ trigger.id == 'closed' }}"
+        sequence:
+          - if: "{{ close_lights | length > 0 }}"
+            then:
+              - action: light.turn_off
+                target: !input close_lights
+          - sequence: !input close_actions
