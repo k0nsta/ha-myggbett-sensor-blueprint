@@ -10,7 +10,7 @@ The sensor shows up in HA as a `binary_sensor` (device_class `door` / `window` /
 
 ## Install
 
-[![Import blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fk0nsta%2Fha-myggbett-sensor-blueprint%2Fblob%2Fmain%2Fblueprints%2Fmyggbett_contact.yaml)
+[![Import blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fk0nsta%2Fha-myggbett-sensor-blueprint%2Fblob%2Fmaster%2Fblueprints%2Fmyggbett_contact.yaml)
 
 Or **Settings → Automations & Scenes → Blueprints → Import Blueprint** and paste:
 
