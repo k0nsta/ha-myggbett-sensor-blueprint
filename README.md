@@ -15,7 +15,7 @@ The sensor shows up in HA as a `binary_sensor` (device_class `door` / `window` /
 Or **Settings → Automations & Scenes → Blueprints → Import Blueprint** and paste:
 
 ```
-https://github.com/k0nsta/ha-myggbett-sensor-blueprint/blob/main/blueprints/myggbett_contact.yaml
+https://github.com/k0nsta/ha-myggbett-sensor-blueprint/blob/master/blueprints/myggbett_contact.yaml
 ```
 
 ## Inputs
