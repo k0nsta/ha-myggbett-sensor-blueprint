@@ -79,6 +79,14 @@ blueprint:
             e.g. "sun is below horizon". The CLOSE branch always runs.
           default: []
           selector: { condition: {} }
+        auto_off_after:
+          name: Auto-off lights after (min)
+          description: >
+            Turn the OPEN lights back off this many minutes after opening, even if the
+            door stays open. 0 = disabled (lights stay until the door closes). Only
+            affects "Lights to turn on" from section 2.
+          default: 0
+          selector: { number: { min: 0, max: 720, step: 1, unit_of_measurement: min, mode: box } }
     sec_reminder:
       name: 5 · Open-too-long reminder
       icon: mdi:bell-alert
@@ -113,6 +121,7 @@ variables:
   reminder_enable: !input reminder_enable
   reminder_after: !input reminder_after
   reminder_repeat: !input reminder_repeat
+  auto_off_after: !input auto_off_after
 
 triggers:
   - trigger: state
@@ -143,20 +152,28 @@ action:
                 target: !input open_lights
           # splice the user's action list (empty list = no-op)
           - sequence: !input open_actions
-          # ---- open-too-long reminder ----
-          - if: "{{ reminder_enable }}"
-            then:
-              - delay: { minutes: "{{ reminder_after | int(5) }}" }
-              - if: "{{ is_state(contact_sensor, 'on') }}"
+          # auto-off and the open-too-long reminder run independently
+          - parallel:
+              # ---- auto-off timeout ----
+              - if: "{{ (auto_off_after | int(0)) > 0 and open_lights | length > 0 }}"
                 then:
-                  - sequence: !input reminder_actions
-              - repeat:
-                  while: "{{ (reminder_repeat | int(0)) > 0 and is_state(contact_sensor, 'on') }}"
-                  sequence:
-                    - delay: { minutes: "{{ reminder_repeat | int(0) }}" }
-                    - if: "{{ is_state(contact_sensor, 'on') }}"
-                      then:
-                        - sequence: !input reminder_actions
+                  - delay: { minutes: "{{ auto_off_after | int(0) }}" }
+                  - action: light.turn_off
+                    target: !input open_lights
+              # ---- open-too-long reminder ----
+              - if: "{{ reminder_enable }}"
+                then:
+                  - delay: { minutes: "{{ reminder_after | int(5) }}" }
+                  - if: "{{ is_state(contact_sensor, 'on') }}"
+                    then:
+                      - sequence: !input reminder_actions
+                  - repeat:
+                      while: "{{ (reminder_repeat | int(0)) > 0 and is_state(contact_sensor, 'on') }}"
+                      sequence:
+                        - delay: { minutes: "{{ reminder_repeat | int(0) }}" }
+                        - if: "{{ is_state(contact_sensor, 'on') }}"
+                          then:
+                            - sequence: !input reminder_actions
       # ================= CLOSED =================
       - conditions:
           - "{{ trigger.id == 'closed' }}"
